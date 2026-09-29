@@ -112,6 +112,36 @@ A IA foi responsável por:
 
 **IA gera a implementação; o humano julga o comportamento.** O código de um player é curto e parece trivial — até o navegador começar a recusar tocar. A parte difícil nunca foi escrever as linhas, foi saber quais linhas importam. Gerar o código acelerou muito; decidir o que *precisava* existir foi o trabalho de verdade.
 
+## 7. O que faríamos diferente se continuássemos
+
+O app funciona, mas ele foi construído como prova de conceito — e as decisões que fazem ele ser pequeno também são as que limitam ele. Continuando, a prioridade não seria adicionar features, seria **corrigir os pontos onde o comportamento atual é silenciosamente errado**.
+
+### Correções que têm prioridade sobre qualquer feature nova
+
+**1. O shuffle está errado.** Hoje ele sorteia um índice aleatório a cada `next()`, sem memória do que já tocou. Na prática isso faz o app **repetir faixas e pular outras** — o oposto do que se espera de um modo aleatório. O certo é gerar uma *ordem* embaralhada uma vez (estilo "bag of tracks") e consumi-la até o fim, re-embaralhando só quando acaba. É uma troca de cinco linhas que muda completamente a sensação do recurso.
+
+**2. O `innerHTML` recebe dado de terceiro.** Em `renderQueue()`, título e artista usam `textContent` — correto — mas a thumbnail é interpolada direto no template de `innerHTML`. A thumbnail vem da resposta da oEmbed API, ou seja, de uma fonte externa, e a fila inteira é reidratada do `localStorage`. Um valor malicioso ali quebra o HTML. O certo é montar o `<img>` e setar `src` por propriedade, como já é feito na capa. É inconsistência dentro do próprio arquivo, o que é pior que o bug.
+
+**3. Falha de faixa não é tratada.** Se um vídeo não puder ser embutido, o estado de `playing` continua ligado e a UI mostra que está tocando quando não está tocando nada. Faltaria um handler de erro por faixa que marca a faixa como indisponível, mostra o motivo na lista e avança sozinha.
+
+**4. A fila inteira é recriada a cada render.** `renderQueue()` zera `innerHTML` e reconstrói todos os `<li>` sempre que qualquer coisa muda. Com uma fila grande isso destrói o scroll, o hover e o estado de foco a cada mudança de faixa. O certo é reaproveitar nós existentes e só alterar o que mudou.
+
+### Melhorias de produto
+
+**Media Session API** seria a maior mudança perceptível. Hoje o app é invisível para o sistema: as teclas de mídia do teclado, o controle do lock screen e o controle do dock do macOS não aparecem. Como é um player de música, o sistema *espera* que ele se anuncie. São ~20 linhas de `navigator.mediaSession` e o app passa a se comportar como todo player nativo — e isso é justamente o que diferencia um app de música de uma página com um player.
+
+**Busca e playlists.** Adicionar por link funciona, mas colar 30 URLs é tedioso. A busca exigiria sair do modelo atual de "só o ID", provavelmente passando a usar a Data API com uma chave de API — o que traz a questão de chave exposta no client, e aí o trade-off de zero backend começa a cobrar.
+
+**Separação real dos arquivos.** `app.js` hoje concentra estado, player, fila, persistência e render. Em ~600 linhas ainda é legível, mas a próxima feature não cabe. Separar em `player.js`, `queue.js`, `store.js` e `ui.js` é mecânico e não muda o comportamento — por isso deveria ser feito *antes* de adicionar qualquer coisa, não depois.
+
+**Inicialização sob demanda.** O `YTPlayer` é construído no load da página, o que faz o iframe e a API do YouTube carregarem antes de o usuário pedir qualquer música. Adiar a criação do player até o primeiro `addTrack` ou o primeiro play deixaria o primeiro carregamento bem mais leve.
+
+**Testes.** Não existe nenhum. O que é testável sem browser — `extractId()` (que aceita cinco formatos de URL diferentes) e a lógica de navegação da fila — é exatamente onde bugs passam despercebidos. Um arquivo de teste para o parsing de URL já teria pego metade dos erros do shuffle.
+
+### O que *não* mudaríamos
+
+A decisão de não ter build, não usar framework e não ter backend foi a melhor do projeto. Um passo na direção de "colocar isso num framework" ia transformar três arquivos legíveis num build, um `node_modules` e um deploy pipeline, pra resolver um problema que o app não tem. Se algum dia a complexidade exigir, que seja por necessidade concreta e não por Pura tendência de moda — esses três arquivos funcionam, e funcionam bem.
+
 ## Estrutura
 
 ```
